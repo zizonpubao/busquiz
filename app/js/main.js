@@ -101,7 +101,7 @@ async function home() {
     <div class="card"><h2>책 (여러 권 섞기 가능)</h2><div class="chips">${bookChips}</div></div>
     <div class="card"><h2>풀기</h2><div class="list">
       <button class="item" data-mode="set"><span class="name">세트별로 풀기</span><span class="meta">PART·회차</span></button>
-      <button class="item" data-mode="subject"><span class="name">과목별로 풀기</span><span class="meta">두 책 섞어서</span></button>
+      <button class="item" data-mode="subject"><span class="name">과목별로 풀기</span><span class="meta">고른 책 섞어서</span></button>
       <button class="item" data-mode="random"><span class="name">랜덤 N문제</span></button>
       <button class="item" data-mode="wrong"><span class="name">오답만 풀기</span><span class="meta">${s.wrong}개</span></button>
       <button class="item" data-mode="confused"><span class="name">헷갈림 표시한 것만</span><span class="meta">${s.confused}개</span></button>
@@ -159,7 +159,8 @@ async function pickSubject(books) {
   const s = await stats.summary();
   const counts = {};
   for (const b of books) for (const q of await db.allBy("questions", "book", b)) counts[q.subject] = (counts[q.subject] || 0) + 1;
-  render(`<div class="card"><div class="list">${quiz.SUBJECTS.filter((x) => counts[x]).map((x) => {
+  const order = quiz.subjectOrder(await db.all("packs"), Object.keys(counts));
+  render(`<div class="card"><div class="list">${order.map((x) => {
     const t = s.subjects[x]; return `<button class="item" data-subj="${x}"><div class="grow"><div class="name">${x}</div><div class="bar" style="margin-top:6px"><i style="width:${t.total ? 100 * t.solved / t.total : 0}%"></i></div></div><span class="meta">${counts[x]}문항</span></button>`;
   }).join("")}</div></div>
   <div class="card"><label class="row"><input type="checkbox" id="rnd" checked> 순서 섞기</label></div>`);
@@ -272,7 +273,7 @@ async function statsScreen() {
   const s = await stats.summary();
   const row = (name, t) => `<div class="stat-row"><span>${esc(name)}</span><span class="n">${t.solved}/${t.total}${t.attempts ? ` · ${Math.round(100 * t.correct / t.attempts)}%` : ""}${t.wrong ? ` · 오답 ${t.wrong}` : ""}</span></div>`;
   render(`<div class="card"><h2>책별</h2>${s.books.map((b) => row(b.name, b)).join("")}</div>
-    <div class="card"><h2>공통 과목별 (두 책 합산)</h2>${quiz.SUBJECTS.filter((x) => s.subjects[x]?.total).map((x) => row(x, s.subjects[x])).join("")}</div>
+    <div class="card"><h2>과목별 (책 합산)</h2>${quiz.subjectOrder(await db.all("packs"), Object.keys(s.subjects).filter((x) => s.subjects[x].total)).map((x) => row(x, s.subjects[x])).join("")}</div>
     ${s.books.map((b) => `<div class="card"><h2>${esc(b.name)} 세트별</h2>${Object.values(b.sets).map((t) => row(t.name, t)).join("")}</div>`).join("")}`);
 }
 async function settings() {

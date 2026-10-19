@@ -6,7 +6,7 @@
 
 검사:
   - 필수 필드, 타입, id 형식({book}-s{2자리}-q{3자리})과 book/number 일치
-  - subject / flags 허용 목록, 보기 개수(data/books.json 책별), 보기 label 순서
+  - subject(books.json에 책별 subjects가 있으면 그 목록) / flags 허용 목록, 보기 개수(data/books.json 책별), 보기 label 순서
   - answer / claude_answer 범위, answer=null <-> missing_answer 플래그
   - claude_answer != answer 이면 answer_conflict 플래그 + claude_note.conflict 필요
   - stem_images, choices[].image 파일이 data/assets/ 에 있는지
@@ -90,8 +90,9 @@ def check_question(q, books, err, warn):
     if books and not book:
         E(f"books.json에 없는 책 코드 `{q.get('book')}`")
 
-    if q.get("subject") not in SUBJECTS:
-        E(f"subject `{q.get('subject')}` 는 공통 목록에 없음")
+    allowed = set((book or {}).get("subjects") or SUBJECTS)
+    if q.get("subject") not in allowed:
+        E(f"subject `{q.get('subject')}` 는 {'책 과목 목록' if (book or {}).get('subjects') else '공통 목록'}에 없음")
     if q.get("part") in (None, ""):
         W("part 비어 있음")
     if not str(q.get("stem", "")).strip():

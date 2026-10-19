@@ -65,7 +65,7 @@ export async function replaceBook(pack) {
   for (const q of pack.questions) qs.put(q);
   for (const [name, data] of Object.entries(pack.images || {})) im.put({ name, data });
   t.objectStore("packs").put({ book: pack.book, name: pack.name, version: pack.version, count: pack.questions.length,
-    sets: pack.sets, importedAt: Date.now() });
+    sets: pack.sets, subjects: pack.subjects || null, importedAt: Date.now() });
   return done(t);
 }
 

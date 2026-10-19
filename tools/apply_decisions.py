@@ -105,6 +105,8 @@ def main():
         if q["subject"] != "기타":
             continue
         t = q["stem"] + " " + (q.get("passage") or "")
+        if q["book"] not in ("gs", "jc"):  # 전산 과목 키워드 규칙 — 기계 책(gm)엔 쓰지 않는다
+            continue
         for subj, pat in SUBJECT_RULES:
             if re.search(pat, t):
                 log["과목"].append(f"{q['id']}→{subj}")

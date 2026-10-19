@@ -55,6 +55,8 @@ def main():
         pack = {"format": 1, "book": code, "name": books[code]["name"], "count": len(qs),
                 "version": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
                 "sets": sets, "questions": qs, "images": images}
+        if books[code].get("subjects"):
+            pack["subjects"] = books[code]["subjects"]
         dest = PACKS / f"busquiz-{code}.json"
         dest.write_text(json.dumps(pack, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         print(f"{dest.relative_to(ROOT).as_posix()}: {len(qs)}문항, 세트 {len(sets)}, 이미지 {len(images)}장, "

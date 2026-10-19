@@ -3,6 +3,14 @@ import * as db from "./db.js";
 
 export const SUBJECTS = ["운영체제", "데이터베이스", "네트워크", "자료구조·알고리즘", "프로그래밍언어", "소프트웨어공학", "정보보안", "컴퓨터구조", "기타"];
 
+// 화면에 보일 과목 순서: 전산 공통 목록 → 팩이 가진 과목 목록(기계 책 등) → 그 밖에 문항에만 있는 과목
+export function subjectOrder(packs, present) {
+  const order = [...SUBJECTS];
+  for (const p of packs) for (const s of p.subjects || []) if (!order.includes(s)) order.push(s);
+  for (const s of present) if (!order.includes(s)) order.push(s);
+  return order.filter((s) => present.includes(s));
+}
+
 // 정답 비교: 책 정답이 배열(복수 정답)이면 그중 하나를 고르면 맞음
 export function isCorrect(q, pick) {
   const a = effectiveAnswer(q);

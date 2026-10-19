@@ -1,4 +1,5 @@
 """scans/raw/<책코드>/ 원본을 쪽 단위 이미지 scans/prepared/<책코드>-p0001.jpg … 로 정리한다.
+(books.json에 page_map이 있는 책은 대응표의 인쇄 쪽번호 순서·이름으로 — run_mapped 참고)
 
 - 사진(HEIC/JPG/PNG/WEBP): EXIF 회전 보정. PDF: 페이지마다 200dpi로 렌더링
 - 방향: 펼친 면을 폰을 세운 채 찍어서 대부분 시계 방향으로 90° 누워 있다.
@@ -231,12 +232,95 @@ def source_key(code, src, page):
     return f"{code}/{src.name}" + (f"#{page + 1}" if page is not None else "")
 
 
+def run_mapped(code, book, overrides, manifest):
+    """page_map이 있는 책: 사진 이름 순서 대신 대응표의 인쇄 쪽번호로 정리한다.
+
+    대응표(JSON) "photos": {"<scans/raw 기준 경로>": {"left": 1394, "right": 1395}} — 한 쪽짜리 사진은 right: null.
+    books.json "pages": [[시작, 끝], …] 범위의 쪽만 만든다. 같은 쪽을 담은 사진이 여럿이면
+    reshoot* 폴더 사진이 이기고, 그다음은 대응표에 먼저 나온 사진. "skip": true인 사진은 쓰지 않는다.
+    결과 이름은 인쇄 쪽번호 그대로(gm-p1298.jpg) — 재촬영본이 나중에 들어와도 다른 쪽 이름이 안 바뀐다.
+    """
+    pmap = json.loads((ROOT / book["page_map"]).read_text(encoding="utf-8"))["photos"]
+    wanted = [p for a, b in book["pages"] for p in range(a, b + 1)]
+    holders = {}  # 쪽 → (사진 경로, "L"/"R"/None)
+    for rel, v in sorted(pmap.items(), key=lambda kv: not kv[0].startswith("reshoot")):
+        if v.get("skip") or not (RAW / rel).exists():
+            continue
+        halves = [("L", v["left"]), ("R", v["right"])] if v.get("right") else [(None, v["left"])]
+        for half, page in halves:
+            holders.setdefault(page, (rel, half))
+    missing = [p for p in wanted if p not in holders]
+    use = {}  # 사진 경로 → {half: 쪽}
+    for p in wanted:
+        if p in holders:
+            rel, half = holders[p]
+            use.setdefault(rel, {})[half] = p
+    absent = [rel for rel in pmap if not (RAW / rel).exists()]
+
+    order = sorted(use, key=lambda rel: min(use[rel].values()))
+    jobs = []
+    for rel in order:
+        ov = dict(overrides.get(rel, {}))
+        if None in use[rel]:
+            ov.setdefault("split", False)
+        jobs.append((rel, str(RAW / rel), None, ov))
+    with ProcessPoolExecutor() as pool:
+        decisions = list(pool.map(analyze, jobs, chunksize=4))
+
+    render_jobs, entries, failed = [], {}, []
+    for rel, d in zip(order, decisions):
+        if "error" in d:
+            failed.append(f"{rel} → {d['error']}")
+            continue
+        if bool(d["split"]) != (None not in use[rel]):
+            failed.append(f"{rel} → 대응표는 {'펼침면' if None not in use[rel] else '한 쪽'}인데 "
+                          f"{'나눔' if d['split'] else '안 나눔'}으로 판별됨 (prep_overrides.json에 split 지정)")
+            continue
+        boxes = {"L": (0.0, d["l_end"]), "R": (d["r_start"], 1.0)} if d["split"] else {None: (0.0, 1.0)}
+        crops = []
+        for half, page in sorted(use[rel].items(), key=lambda kv: kv[1]):
+            name = f"{code}-p{page:04d}"
+            crops.append((boxes[half], str(OUT / f"{name}.jpg")))
+            entries[name] = {"source": (RAW / rel).relative_to(ROOT).as_posix(), "pdf_page": None,
+                             "rotate": d["rotate"], "half": half, "printed_page": page,
+                             "crop": [round(boxes[half][0], 3), round(boxes[half][1], 3)]}
+        render_jobs.append((str(RAW / rel), None, d["rotate"], crops))
+    with ProcessPoolExecutor() as pool:
+        failed += [e for e in pool.map(render, render_jobs, chunksize=4) if e]
+
+    stale = sorted(p.stem for p in OUT.glob(f"{code}-p*.jpg") if p.stem not in entries)
+    for k in [k for k in manifest if k.startswith(f"{code}-")]:
+        del manifest[k]
+    manifest.update(entries)
+    ok = [d for d in decisions if "error" not in d]
+    reshoots = sorted({e["source"] for e in entries.values() if "/reshoot" in e["source"]})
+    unused = sorted(set(pmap) - set(use) - set(absent))
+    wide = [d["key"] for d in ok if d.get("gutter") == "all_differ"]
+
+    print(f"[{code}] 사진 {len(use)}장 → 쪽 이미지 {len(entries)}장 (순서 기준: {book['page_map']}의 인쇄 쪽번호, "
+          f"이름 = 인쇄 쪽번호)")
+    print(f"  빠진 쪽: {missing or '없음'}")
+    print(f"  재촬영본 사용: {reshoots or '없음'}")
+    print(f"  쓰지 않은 사진(겹치거나 범위 밖): {len(unused)}장")
+    print(f"  돌리지 않음: {[d['key'] for d in ok if d['rotate'] == 0] or '없음'}")
+    if wide:
+        print(f"  접힌 곳 후보 셋이 다 달라 넓게 겹쳐 나눔(확인 필요): {wide}")
+    print(f"  변환 실패: {failed or '없음'}")
+    if absent:
+        print(f"  대응표에 있으나 파일 없음: {absent}")
+    if stale:
+        print(f"  이전 실행에서 남은 파일(확인 필요): {stale}")
+    (OUT / f"_decisions-{code}.json").write_text(
+        json.dumps(decisions, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 def main():
     books = json.loads((ROOT / "data" / "books.json").read_text(encoding="utf-8"))
     codes = sys.argv[1:] or [b["code"] for b in books]
-    known = {b["code"] for b in books}
+    book_by = {b["code"]: b for b in books}
+    known = {b["code"] for b in books} | {Path(b["raw_dir"]).name for b in books if b.get("raw_dir")}
     for d in RAW.iterdir():
-        if d.is_dir() and d.name not in known:
+        if d.is_dir() and d.name not in known and not d.name.startswith("reshoot"):
             print(f"(건너뜀: scans/raw/{d.name}/ 는 books.json에 없는 폴더)")
     overrides = json.loads(OVERRIDES.read_text(encoding="utf-8")) if OVERRIDES.exists() else {}
 
@@ -245,6 +329,9 @@ def main():
     manifest = json.loads(man_path.read_text(encoding="utf-8")) if man_path.exists() else {}
 
     for code in codes:
+        if book_by.get(code, {}).get("page_map"):
+            run_mapped(code, book_by[code], overrides, manifest)
+            continue
         sources, order_by, skipped = plan_book(code)
         # 재촬영본: 원본 자리(순서·쪽 번호)는 그대로 두고 읽는 파일만 바꾼다
         actual = {}
