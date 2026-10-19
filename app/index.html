@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BusQuiz</title>
+<meta name="description" content="버스에서 한 손으로 푸는 공기업 전산직·정보처리기사 기출 문제풀이 (개인용)">
+<meta name="theme-color" content="#12141c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BusQuiz">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <button class="icon-btn" id="back" aria-label="뒤로">‹</button>
+    <div class="title" id="title">BusQuiz</div>
+    <div class="sub" id="subtitle"></div>
+    <button class="icon-btn" id="menu" aria-label="메뉴">⋯</button>
+  </header>
+  <main id="main"></main>
+  <div class="bottom hidden" id="bottom"></div>
+</div>
+<div id="layer"></div>
+<div class="toast" id="toast"></div>
+<noscript>자바스크립트가 필요합니다.</noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
