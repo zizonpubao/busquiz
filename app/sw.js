@@ -1,5 +1,5 @@
 // BusQuiz 서비스워커 — 앱 껍데기만 캐시한다. 문제팩은 IndexedDB에 있으므로 네트워크가 전혀 필요 없다.
-const VERSION = "busquiz-v2";
+const VERSION = "busquiz-v4";
 const SHELL = [
   "./", "./index.html", "./manifest.webmanifest",
   "./css/app.css",

@@ -176,7 +176,7 @@ async function question(s) {
   const prog = await quiz.getProgress(q.id);
   const saved = s.answers[q.id];
   const state = { pick: saved?.pick ?? null, reveal: saved != null, examMode: false };
-  setTitle(s.title, `${s.idx + 1} / ${s.qids.length}`);
+  setTitle(s.title, `${s.idx + 1} / ${s.qids.length} ▾`, { onSub: () => quizGrid(s) });
   let tab = "book";
   const draw = () => {
     const m = render(`<div class="card">${questionHtml(q, imgs, state)}
@@ -192,10 +192,31 @@ async function question(s) {
   };
   const bar = () => bottom([
     { label: (prog?.confused ? "★ 헷갈림" : "☆ 헷갈림"), cls: "ghost side", side: true, onClick: async () => { const on = await quiz.toggleConfused(q); toast(on ? "헷갈림 표시" : "표시 해제"); question(s); } },
+    { label: "‹", cls: "ghost side", side: true, disabled: s.idx === 0, onClick: async () => { s.idx--; await quiz.saveSession(s); question(s); } },
     { label: state.reveal ? (s.idx + 1 < s.qids.length ? "다음 →" : "결과 보기") : "건너뛰기", cls: state.reveal ? "primary" : "ghost",
       onClick: async () => { s.idx++; await quiz.saveSession(s); question(s); } },
   ]);
   draw();
+}
+// 풀기 모드 문항 현황표: 번호 순서대로 맞음(초록)·틀림(빨강)·채점 제외(회색)·안 푼 문항, 누르면 그 문항으로
+function quizGrid(s) {
+  const vals = Object.values(s.answers);
+  const ok = vals.filter((a) => a.ok === true).length, bad = vals.filter((a) => a.ok === false).length;
+  const cells = s.qids.map((id, i) => {
+    const a = s.answers[id];
+    const cls = [a ? (a.ok === true ? "ok" : a.ok === false ? "bad" : "done") : (i < s.idx ? "skip" : ""), i === s.idx ? "cur" : ""].join(" ");
+    return `<button class="${cls}" data-i="${i}" title="${esc(id)}">${i + 1}</button>`;
+  }).join("");
+  const sh = sheet(`<div class="row" style="margin-bottom:10px"><b class="grow">${esc(s.title)}</b><span class="muted small">${s.idx + 1} / ${s.qids.length}</span></div>
+    <div class="row small" style="gap:12px;margin-bottom:10px"><span><i class="dot ok"></i> 맞음 ${ok}</span><span><i class="dot bad"></i> 틀림 ${bad}</span><span><i class="dot skip"></i> 건너뜀 ${s.qids.slice(0, s.idx).filter((id) => !s.answers[id]).length}</span><span><i class="dot"></i> 남음 ${s.qids.length - vals.length}</span></div>
+    <div class="grid">${cells}</div>
+    ${bad ? `<button class="btn ghost" id="gridWrong" style="margin-top:12px">틀린 문항만 다시 풀기</button>` : ""}`);
+  sh.querySelectorAll("[data-i]").forEach((b) => b.onclick = async () => { s.idx = +b.dataset.i; await quiz.saveSession(s); sh.remove(); question(s); });
+  sh.querySelector("#gridWrong")?.addEventListener("click", async () => {
+    const ids = Object.entries(s.answers).filter(([, a]) => a.ok === false).map(([id]) => id);
+    const n = { id: "s" + Date.now(), mode: "wrong", filter: {}, title: s.title + " 오답", qids: ids, idx: 0, answers: {}, startedAt: Date.now(), updatedAt: Date.now(), done: false };
+    await db.put("sessions", n); await db.setMeta("lastSession", n.id); sh.remove(); reset(question, n);
+  });
 }
 async function result(s) {
   s.done = true; await quiz.saveSession(s);
@@ -226,7 +247,7 @@ async function examQuestion(s) {
   const q = await db.get("questions", s.qids[s.idx]); const imgs = await loadImages(q);
   const state = { pick: s.answers[q.id] ?? null, reveal: false, examMode: true };
   const left = () => exam.EXAM_SEC - s.elapsed;
-  setTitle(s.title, `${s.idx + 1}/100`);
+  setTitle(s.title, `${s.idx + 1}/100 ▾`, { onSub: () => examGrid(s) });
   const m = render(`<div class="card">${s.useTimer ? `<div class="row"><span class="timer" id="tm">${fmtTime(left())}</span><span class="muted small">남음 · 답함 ${Object.keys(s.answers).length}/100</span></div>` : `<div class="muted small">답함 ${Object.keys(s.answers).length}/100</div>`}${questionHtml(q, imgs, state)}</div>`);
   wireImages(m);
   m.querySelectorAll(".choice").forEach((b) => b.onclick = async () => { s.answers[q.id] = +b.dataset.n; await db.put("sessions", s); examQuestion(s); });

@@ -8,9 +8,49 @@ export function inline(s) {
   h = h.replace(/\\\*/g, "&#42;");                                   // \* 이스케이프
   h = h.replace(/`([^`\n]+)`/g, (_, c) => `<code>${c}</code>`);
   h = h.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
-  // 위첨자: 2^10, 2^-5, 2^(n-1), 2^n → <sup>. 공백이 있는 a ^ b(XOR)는 건드리지 않는다
-  h = h.replace(/([\w)\]])\^(-?\d+(?:[.,]\d+)?|\([^()\s]{1,12}\)|[a-zA-Z](?![a-zA-Z]))/g, "$1<sup>$2</sup>");
-  return h;
+  // 수식: 인라인 코드(<code>) 안은 건드리지 않는다
+  return h.split(/(<code>[\s\S]*?<\/code>)/).map((seg, i) => (i % 2 ? seg : formula(seg))).join("");
+}
+
+// 위첨자 x^2, 아래첨자 x_1. 공백이 있는 a ^ b(XOR)는 건드리지 않는다
+const LATGRK = String.raw`\p{Script=Latin}\p{Script=Greek}ℓ`;                 // 수식 변수에 쓰는 글자: 라틴·그리스·ℓ
+const SUB_TOKEN = String.raw`\(([^()]{1,14})\)|\d+|[\p{Script=Latin}ℓ∞]+\d*|\p{Script=Greek}+\d*|[Ⅰ-ⅿ]+|([\p{Script=Hangul}]+)`; // _(x=L/4) | _1 | _max | _Ⅱ | _강
+const SUP_RE = /([\p{L}\p{N})\]])\^(-?\d+(?:[.,]\d+)?|\([^()\s]{1,12}\)|[\p{Script=Latin}\p{Script=Greek}ℓ](?![\p{Script=Latin}\p{Script=Greek}ℓ]))/gu;
+const SUB_RE = new RegExp(String.raw`([${LATGRK}\p{M}0-9]+|[)\]|∫])_(${SUB_TOKEN})`, "gu");
+const LEFT_SUB_RE = /(^|[^\p{L}\p{N}_])_(\d+)(?=\p{L}\p{M}*_)/gu;
+const JOSA ="은는이가을를의와과로에도만";                                        // 아래첨자 한글 뒤에 붙은 조사 떼기용
+
+// snake_case(int_arr, num_digits, MAX_QUEUE_SIZE)가 망가지지 않도록, 밑이 수식 기호처럼 생길 때만 첨자로 바꾼다
+function subOk(base, sub, before, after, grouped) {
+  if (before === "_" || after === "_") return false;
+  if (/^[)\]|∫]$/.test(base)) return sub.length <= 14;                      // (…)_m, […]_0, |M|_max, ∫_0
+  const core = (base.match(new RegExp(String.raw`[${LATGRK}\p{M}]+$`, "u")) || [""])[0].replace(/\p{M}/gu, ""); // 밑 끝의 글자 묶음 (1.5σ → σ, V̇ → V)
+  if (!core) return false;
+  if (/^[가-힣]+$/.test(sub)) return sub.length <= 8 && (core.length === 1 || /[\p{Script=Greek}]/u.test(core));  // σ_강, h_팽창밸브출구 (VIEW_이름 같은 낱말은 제외)
+  if (sub.length > 14) return false;
+  if (/log$/.test(core)) return /^(\d+|[A-Za-z])$/.test(sub);              // log_2, nlog_2
+  if (core === "kg") return sub === "f";                                    // kg_f
+  if (sub.length > 6 && !grouped) return false;                            // _(x=0.75L)처럼 괄호로 묶은 건 길어도 됨
+  if (/[\p{Script=Greek}ℓ]/u.test(core)) return true;                  // πd_1, νσ_x (그리스 문자가 낀 곱은 코드 낱말이 아님)
+  if (core.length === 1) return true;                                       // σ_max, P_1, c_p
+  if (/^[A-Z]{3,}$/.test(core) && /^[A-Z]{2,}$/.test(sub)) return false;    // ARRAY_SIZE, CHK_AGE
+  if (core.length <= 3 && /^(\d+|[A-Za-z])$/.test(sub)) return true;        // mc_p, ma_x, cmH_2O
+  return !/[a-z]{2}/.test(core.replace(/[A-Z]/g, ""));                      // GI_p, ΣM_B, Fe_3C, NPSH_a (낱말 int_arr·student_id는 제외)
+}
+
+function subPass(h) {
+  return h.replace(SUB_RE, (m, base, tok, paren, hangul, off, str) => {
+    let sub = paren ?? tok, tail = "";
+    if (hangul && hangul.length >= 3 && JOSA.includes(hangul.slice(-1))) { sub = hangul.slice(0, -1); tail = hangul.slice(-1); }
+    else if (/^[A-Za-z]{2,}$/.test(sub) && str[off + m.length] === "_" && (/^\p{L}\p{M}*$/u.test(base) || /\p{Script=Greek}/u.test(base))) { tail = sub.slice(-1); sub = sub.slice(0, -1); }  // A_iE_i → A_i E_i (뒤 글자는 다음 변수)
+    return subOk(base, sub, str[off - 1], tail || str[off + m.length], paren != null) ? `${base}<sub>${sub}</sub>${tail}` : m;
+  });
+}
+
+function formula(h) {
+  h = h.replace(SUP_RE, "$1<sup>$2</sup>");
+  h = h.replace(LEFT_SUB_RE, "$1<sub>$2</sub>");                             // 열역학 _1Q_2 → ₁Q₂
+  return subPass(subPass(h));                                                // 두 번: A_iE_i의 뒤쪽 E_i까지
 }
 
 // 본문(발문·보기·지문): 줄바꿈 유지, 밑줄만

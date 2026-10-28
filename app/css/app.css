@@ -128,6 +128,12 @@ th { background: var(--soft); font-weight: 700; }
 .grid button { min-height: 36px; border-radius: 6px; background: var(--soft); font-size: .8rem; font-weight: 600; }
 .grid button.done { background: var(--accent); color: var(--accent-ink); }
 .grid button.cur { outline: 2px solid var(--warn); }
+.grid button.ok { background: var(--ok); color: #fff; }
+.grid button.bad { background: var(--bad); color: #fff; }
+.grid button.skip { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--soft); vertical-align: -1px; margin-right: 3px; }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.skip { background: transparent; border: 1px dashed var(--line); }
+.top .sub.link { padding: 6px 10px; border-radius: 10px; background: var(--soft); color: var(--ink); font-weight: 600; cursor: pointer; }
 .score { font-size: 2rem; font-weight: 800; }
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
   padding: 10px 16px; border-radius: 999px; font-size: .9rem; z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }

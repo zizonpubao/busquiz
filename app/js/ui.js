@@ -7,9 +7,10 @@ export function el(html) {
 }
 export function esc(s) { return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
-export function setTitle(title, sub = "", { back = true } = {}) {
+export function setTitle(title, sub = "", { back = true, onSub = null } = {}) {
   $("#title").textContent = title; $("#subtitle").textContent = sub;
   $("#back").classList.toggle("hidden", !back);
+  const st = $("#subtitle"); st.onclick = onSub; st.classList.toggle("link", !!onSub);
 }
 
 export function render(html) {
