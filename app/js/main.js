@@ -198,22 +198,25 @@ async function question(s) {
   ]);
   draw();
 }
-// 풀기 모드 문항 현황 화면: 번호 순서대로 맞음(초록)·틀림(빨강)·건너뜀(점선)·안 푼 문항, 누르면 그 문항으로
-function quizGrid(s) {
+// 풀기 모드 문항 현황 화면: 문항마다 한 줄(번호 · 발문 앞부분 · 맞음/틀림/건너뜀), 누르면 그 문항으로
+const snip = (q, n = 60) => { const t = (q?.stem || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n) + "…" : t; };
+async function quizGrid(s) {
   const vals = Object.values(s.answers);
   const ok = vals.filter((a) => a.ok === true).length, bad = vals.filter((a) => a.ok === false).length;
   const skipped = s.qids.slice(0, s.idx).filter((id) => !s.answers[id]).length;
-  const cells = s.qids.map((id, i) => {
-    const a = s.answers[id];
-    const cls = [a ? (a.ok === true ? "ok" : a.ok === false ? "bad" : "done") : (i < s.idx ? "skip" : ""), i === s.idx ? "cur" : ""].join(" ");
-    return `<button class="${cls}" data-i="${i}">${i + 1}</button>`;
-  }).join("");
   setTitle("문항 현황", `${s.idx + 1} / ${s.qids.length}`);
   bottom([{ label: "문제로 돌아가기", cls: "primary", onClick: back }]);
+  const qs = await Promise.all(s.qids.map((id) => db.get("questions", id)));
+  const rows = s.qids.map((id, i) => {
+    const a = s.answers[id];
+    const st = a ? (a.ok === true ? ["ok", "맞음"] : a.ok === false ? ["bad", `틀림 · 정답 ${circ(quiz.effectiveAnswer(qs[i]))}`] : ["done", "채점 제외"]) : (i < s.idx ? ["skip", "건너뜀"] : ["", ""]);
+    return `<button class="item qrow ${st[0]} ${i === s.idx ? "cur" : ""}" data-i="${i}"><span class="num">${i + 1}</span><span class="grow snip">${esc(snip(qs[i]))}</span><span class="st">${st[1]}</span></button>`;
+  }).join("");
   const m = render(`<div class="card"><h2 style="margin:0 0 8px">${esc(s.title)}</h2>
-      <div class="row small" style="flex-wrap:wrap;gap:6px 14px;margin-bottom:12px"><span><i class="dot ok"></i> 맞음 ${ok}</span><span><i class="dot bad"></i> 틀림 ${bad}</span><span><i class="dot skip"></i> 건너뜀 ${skipped}</span><span><i class="dot"></i> 남음 ${s.qids.length - vals.length}</span></div>
-    <div class="grid">${cells}</div></div>
-    ${bad ? `<div class="card"><button class="btn ghost" id="gridWrong">틀린 ${bad}문항만 다시 풀기</button></div>` : ""}`);
+      <div class="row small" style="flex-wrap:wrap;gap:6px 14px"><span><i class="dot ok"></i> 맞음 ${ok}</span><span><i class="dot bad"></i> 틀림 ${bad}</span><span><i class="dot skip"></i> 건너뜀 ${skipped}</span><span><i class="dot"></i> 남음 ${s.qids.length - vals.length}</span></div>
+      ${bad ? `<button class="btn ghost" id="gridWrong" style="margin-top:12px">틀린 ${bad}문항만 다시 풀기</button>` : ""}</div>
+    <div class="list">${rows}</div>`);
+  m.querySelector(".qrow.cur")?.scrollIntoView({ block: "center" });
   m.querySelectorAll("[data-i]").forEach((b) => b.onclick = async () => { s.idx = +b.dataset.i; await quiz.saveSession(s); back(); });
   m.querySelector("#gridWrong")?.addEventListener("click", async () => {
     const ids = Object.entries(s.answers).filter(([, a]) => a.ok === false).map(([id]) => id);
@@ -269,10 +272,13 @@ async function examQuestion(s) {
     { label: s.idx === 99 ? "제출" : "›", cls: s.idx === 99 ? "primary" : "primary side", side: s.idx !== 99, onClick: async () => { if (s.idx === 99) { if (await confirm("답안을 제출할까요? 안 푼 문항은 틀린 것으로 칩니다.", "제출")) finishExam(s); } else { s.idx++; await db.put("sessions", s); examQuestion(s); } } },
   ]);
 }
-function examGrid(s) {
+async function examGrid(s) {
   setTitle("문항표", `답함 ${Object.keys(s.answers).length} / 100`);
   bottom([{ label: "문제로 돌아가기", cls: "primary", onClick: back }, { label: "제출", cls: "ghost side", side: true, onClick: async () => { if (await confirm("답안을 제출할까요? 안 푼 문항은 틀린 것으로 칩니다.", "제출")) { stack.pop(); finishExam(s); } } }]);
-  const m = render(`<div class="card"><p class="muted small" style="margin:0 0 10px">${esc(s.title)} · 파란색 = 답함. 누르면 그 문항으로.</p><div class="grid">${s.qids.map((id, i) => `<button class="${s.answers[id] != null ? "done" : ""} ${i === s.idx ? "cur" : ""}" data-i="${i}">${i + 1}</button>`).join("")}</div></div>`);
+  const qs = await Promise.all(s.qids.map((id) => db.get("questions", id)));
+  const m = render(`<div class="card"><h2 style="margin:0">${esc(s.title)}</h2><p class="muted small" style="margin:4px 0 0">누르면 그 문항으로. 채점은 제출 뒤에.</p></div>
+    <div class="list">${s.qids.map((id, i) => { const a = s.answers[id]; return `<button class="item qrow ${a != null ? "done" : ""} ${i === s.idx ? "cur" : ""}" data-i="${i}"><span class="num">${i + 1}</span><span class="grow snip">${esc(snip(qs[i]))}</span><span class="st">${a != null ? circ(a) : ""}</span></button>`; }).join("")}</div>`);
+  m.querySelector(".qrow.cur")?.scrollIntoView({ block: "center" });
   m.querySelectorAll("[data-i]").forEach((b) => b.onclick = async () => { s.idx = +b.dataset.i; await db.put("sessions", s); back(); });
 }
 async function finishExam(s) {

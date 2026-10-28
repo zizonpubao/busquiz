@@ -131,6 +131,15 @@ th { background: var(--soft); font-weight: 700; }
 .grid button.ok { background: var(--ok); color: #fff; }
 .grid button.bad { background: var(--bad); color: #fff; }
 .grid button.skip { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+.qrow { border-left: 5px solid var(--line); padding: 10px 12px 10px 10px; gap: 8px; }
+.qrow .num { font-weight: 700; min-width: 2em; text-align: right; color: var(--muted); }
+.qrow .snip { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; font-size: .9rem; }
+.qrow .st { font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.qrow.ok { border-left-color: var(--ok); } .qrow.ok .st { color: var(--ok); }
+.qrow.bad { border-left-color: var(--bad); } .qrow.bad .st { color: var(--bad); }
+.qrow.skip { border-left-style: dashed; } .qrow.skip .st, .qrow.skip .snip { color: var(--muted); }
+.qrow.done { border-left-color: var(--accent); } .qrow.done .st { color: var(--accent); }
+.qrow.cur { outline: 2px solid var(--warn); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--soft); vertical-align: -1px; margin-right: 3px; }
 .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.skip { background: transparent; border: 1px dashed var(--line); }
 .top .sub.link { padding: 6px 10px; border-radius: 10px; background: var(--soft); color: var(--ink); font-weight: 600; cursor: pointer; }
